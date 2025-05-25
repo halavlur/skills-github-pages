@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>English to Yiddish Translator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom font for better readability */
+        body {
+            font-family: 'Inter', sans-serif;
+            /* Professional dark gradient background */
+            background: linear-gradient(to bottom right, #1a202c, #2d3748); /* Dark blue-gray gradient */
+        }
+        /* Ensure the main container takes full height on small screens */
+        html, body, #app-container {
+            min-height: 100vh;
+        }
+        /* Style for Yiddish output and its label to be Right-to-Left */
+        #yiddishOutput, label[for="yiddishOutput"] {
+            direction: rtl; /* Set text direction to Right-to-Left */
+            text-align: right; /* Align text to the right */
+        }
+        /* The English input and its label should remain LTR */
+        #englishInput, label[for="englishInput"] {
+            direction: ltr; /* Set text direction to Left-to-Right */
+            text-align: left; /* Align text to the left */
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div id="app-container" class="bg-white p-8 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col items-center justify-center">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">English to Yiddish Translator</h1>
+        <h2 class="text-xl font-semibold text-gray-600 mb-6 text-center">ענגליש צו אידיש איבערזעצער</h2>
+
+        <div id="apiKeySection" class="w-full mb-4">
+            <label for="apiKeyInput" class="block text-gray-700 text-sm font-semibold mb-2">
+                Enter your Gemini API Key:
+            </label>
+            <div class="flex items-center gap-2"> <input type="password" id="apiKeyInput"
+                       class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                       placeholder="Paste your API Key here (e.g., AIzaSy...)" />
+                <button id="submitApiKeyButton"
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold p-3 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75"> Submit
+                </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">You can get an API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 hover:underline">Google AI Studio</a>.</p>
+            <span id="apiKeyStatusMessage" class="ml-3 text-sm hidden"></span>
+        </div>
+
+        <div class="w-full mb-4">
+            <label for="englishInput" class="block text-gray-700 text-sm font-semibold mb-2">
+                Enter English Text:
+            </label>
+            <textarea id="englishInput"
+                      class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y min-h-[120px] text-gray-900"
+                      placeholder="Type your English text here..."></textarea>
+        </div>
+
+        <button id="translateButton"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-75 mb-6">
+            Translate
+        </button>
+
+        <div id="loadingIndicator" class="hidden flex items-center justify-center mb-6 text-blue-600">
+            <svg class="animate-spin h-5 w-5 mr-3 text-blue-600" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            Translating...
+        </div>
+
+        <div class="w-full">
+            <label for="yiddishOutput" class="block text-gray-700 text-sm font-semibold mb-2">
+                אידישע איבערזעצונג:
+            </label>
+            <textarea id="yiddishOutput"
+                      class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:outline-none resize-y min-h-[200px] text-gray-900"
+                      readonly
+                      placeholder="אייער אידישע איבערזעצונג וועט זיך דאָ באַווייזן..."></textarea>
+            <button id="copyButton"
+                    class="mt-4 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg shadow-md transition duration-300 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">
+                קאפּירן טעקסט
+            </button>
+            <span id="copyMessage" class="ml-3 text-green-600 hidden">קאפּירט!</span>
+        </div>
+
+        <div id="errorMessage" class="hidden text-red-600 text-sm mt-4"></div>
+    </div>
+
+    <script>
+        // Get references to the HTML elements
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const apiKeySection = document.getElementById('apiKeySection');
+        const submitApiKeyButton = document.getElementById('submitApiKeyButton'); // New button for API key
+        const apiKeyStatusMessage = document.getElementById('apiKeyStatusMessage'); // Message for API key status
+        const englishInput = document.getElementById('englishInput');
+        const translateButton = document.getElementById('translateButton');
+        const yiddishOutput = document.getElementById('yiddishOutput');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const copyButton = document.getElementById('copyButton');
+        const copyMessage = document.getElementById('copyMessage');
+
+        // Function to validate and hide API key input
+        const validateAndHideApiKey = () => {
+            const apiKey = apiKeyInput.value.trim();
+            if (apiKey === '') {
+                apiKeyStatusMessage.textContent = 'Please enter your API Key.';
+                apiKeyStatusMessage.classList.remove('hidden', 'text-green-600');
+                apiKeyStatusMessage.classList.add('text-red-600');
+                apiKeySection.classList.remove('hidden');
+                return false;
+            } else {
+                apiKeyStatusMessage.textContent = 'API Key saved!';
+                apiKeyStatusMessage.classList.remove('hidden', 'text-red-600');
+                apiKeyStatusMessage.classList.add('text-green-600');
+                setTimeout(() => {
+                    apiKeySection.classList.add('hidden');
+                    apiKeyStatusMessage.classList.add('hidden');
+                }, 1500); // Hide message and section after a short delay
+                return true;
+            }
+        };
+
+        // Add event listener to the new API key submit button
+        submitApiKeyButton.addEventListener('click', validateAndHideApiKey);
+
+        // Add event listener to the translate button
+        translateButton.addEventListener('click', async () => {
+            const englishText = englishInput.value.trim();
+            const apiKey = apiKeyInput.value.trim(); // Get API key from input field
+
+            // Clear previous error messages and output
+            errorMessage.classList.add('hidden');
+            yiddishOutput.value = '';
+            copyMessage.classList.add('hidden'); // Hide copy message on new translation
+
+            // Check if API key is present before attempting translation
+            if (apiKey === '') {
+                errorMessage.textContent = 'Please enter your API Key before translating.';
+                errorMessage.classList.remove('hidden');
+                apiKeySection.classList.remove('hidden'); // Ensure API key input is visible
+                apiKeyStatusMessage.textContent = ''; // Clear previous status message
+                return;
+            }
+
+            if (englishText === '') {
+                errorMessage.textContent = 'Please enter some English text to translate.';
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // Show loading indicator
+            loadingIndicator.classList.remove('hidden');
+            translateButton.disabled = true; // Disable button during translation
+
+            try {
+                // Construct the prompt for the Gemini AI model
+                const prompt = `Translate the following English text to Yiddish. The translation should be in a very warm, natural, conversational, idiomatic, and specifically "heimish" (traditional, Chasidic) style, as if a native Yiddish speaker is talking. Do NOT add any words that are not present in the original English text. Provide only the Yiddish translation:\n\nEnglish: "${englishText}"\nYiddish:`;
+
+                // Prepare the payload for the API request
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = { contents: chatHistory };
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+                // Make the fetch call to the Gemini API
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                // Check if the response was successful
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(`API error: ${response.status} ${response.statusText} - ${errorData.error?.message || 'Unknown error'}`);
+                }
+
+                const result = await response.json();
+
+                // Extract the translated text from the API response
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const translatedText = result.candidates[0].content.parts[0].text;
+                    yiddishOutput.value = translatedText.trim();
+                } else {
+                    throw new Error('No translation found in the API response.');
+                }
+
+            } catch (error) {
+                console.error('Translation error:', error);
+                errorMessage.textContent = `Failed to translate: ${error.message}. Please try again.`;
+                errorMessage.classList.remove('hidden');
+                apiKeySection.classList.remove('hidden'); // Show API key input on error
+                apiKeyStatusMessage.textContent = 'API Key might be invalid or expired.';
+                apiKeyStatusMessage.classList.remove('hidden', 'text-green-600');
+                apiKeyStatusMessage.classList.add('text-red-600');
+            } finally {
+                // Hide loading indicator and re-enable button
+                loadingIndicator.classList.add('hidden');
+                translateButton.disabled = false;
+            }
+        });
+
+        // Add event listener for the copy button
+        copyButton.addEventListener('click', () => {
+            if (yiddishOutput.value.trim() === '') {
+                // Do nothing if there's no text to copy
+                return;
+            }
+
+            // Select the text in the textarea
+            yiddishOutput.select();
+            yiddishOutput.setSelectionRange(0, 99999); // For mobile devices
+
+            try {
+                // Copy the text to the clipboard
+                document.execCommand('copy');
+                // Show "Copied!" message
+                copyMessage.classList.remove('hidden');
+                setTimeout(() => {
+                    copyMessage.classList.add('hidden');
+                }, 2000); // Hide message after 2 seconds
+            } catch (err) {
+                console.error('Failed to copy text:', err);
+                // Optionally, show an error message to the user
+                errorMessage.textContent = 'Failed to copy text. Please try again or copy manually.';
+                errorMessage.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
